@@ -1,6 +1,6 @@
 # PIX — Simulação de transferências concorrentes (A01)
 
-Trabalho de Sistemas Operacionais que simula transferências do tipo PIX entre duas contas, atendidas por um **pool de 4 threads (workers)**. O programa demonstra:
+Prova de Sistemas Operacionais que simula transferências do tipo PIX entre duas contas, atendidas por um **pool de 4 threads (workers)**. O programa demonstra:
 
 1. **Condição de corrida** sobre um recurso compartilhado (modo `race`);
 2. **Proteção da seção crítica** com atendimento em ordem de chegada, **FCFS** (modo `safe`);
