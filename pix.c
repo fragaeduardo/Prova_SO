@@ -1,4 +1,8 @@
 #include <stdio.h>
+// Eduardo Fraga Pereira - 202405847
+// Caio Wallace Machado Gomes - 202401763
+// Wryel Teodoro de Morais - 202405860
+
 #include <string.h>
 #include <stdlib.h>
 #include <pthread.h>
