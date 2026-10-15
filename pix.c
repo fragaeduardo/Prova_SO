@@ -1,11 +1,11 @@
-#include <errno.h>
-#include <pthread.h>
-#include <semaphore.h>
-#include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <signal.h>
 #include <unistd.h>
+#include <semaphore.h>
+#include <errno.h>
 
 #define POOL_SIZE 4
 #define MAX_REQUESTS 10000
@@ -14,31 +14,29 @@ typedef struct {
     int id;
 } Request;
 
-/* Fila FCFS: requisições entram em ordem R1..RN e saem sempre pela cabeça. */
+// Fila FCFS: requisições entram em ordem R1..RN e saem sempre pela cabeça.
 Request queue[MAX_REQUESTS];
+int worker_ids[POOL_SIZE];
 int request_count;
 int queue_head;
-int in_service[POOL_SIZE]; /* id da requisição em atendimento por worker (0 = livre) */
-int worker_ids[POOL_SIZE];
+int in_service[POOL_SIZE]; // id da requisição em atendimento por worker (0 = livre)
 
-/* Base de dados compartilhada (recurso crítico). */
+// Base de dados compartilhada (recurso crítico).
 int account_a = 1000;
 int account_b = 0;
 int completed;
 int safe_mode;
 
-pthread_mutex_t queue_mutex;   /* protege fila, in_service e completed */
-pthread_mutex_t account_mutex; /* usado no modo race (acessos isolados) */
-sem_t turn[MAX_REQUESTS];      /* modo safe: turn[k] libera a k-ésima requisição */
+pthread_mutex_t queue_mutex;   // protege fila, in_service e completed
+pthread_mutex_t account_mutex; // usado no modo race (acessos isolados)
+sem_t turn[MAX_REQUESTS];      // Cada pedido espera no seu semáforo; somente o primeiro começa liberado.
 
-/* O handler só altera uma flag (async-signal-safe); a impressão fica fora dele. */
+// O handler só altera uma flag (async-signal-safe); a impressão fica fora dele.
 volatile sig_atomic_t debug_requested;
 
-void handle_debug(int sig) {
-    /* Reinstala o handler: em algumas implementações de signal() (semântica
-       System V, p.ex. gcc -std=c99) o tratamento volta ao padrão após o 1o sinal,
-       e o 2o SIGUSR1 encerraria o programa. signal() é async-signal-safe. */
-    signal(sig, handle_debug);
+void handle_debug(int signal_number) {
+    // Reinstala o handler para permitir usar a depuração várias vezes também em C99.
+    signal(signal_number, handle_debug);
     debug_requested = 1;
 }
 
@@ -56,13 +54,13 @@ void show_queue(void) {
 }
 
 void wait_turn(sem_t *s) {
-    /* sem_wait pode falhar com EINTR se um sinal interromper a thread. */
+    // sem_wait pode falhar com EINTR se um sinal interromper a thread.
     while (sem_wait(s) == -1 && errno == EINTR) {
     }
 }
 
 void *worker(void *arg) {
-    /* Pthreads entrega o argumento como void*: voltamos para int*. */
+    // Pthreads entrega o argumento como void*: voltamos para int*.
     int worker_id = *((int *)arg);
 
     for (;;) {
@@ -70,7 +68,7 @@ void *worker(void *arg) {
         int old_a;
         int old_b;
 
-        /* Retirar sempre a cabeça da fila mantém a ordem FCFS. */
+        // Retirar sempre a cabeça da fila mantém a ordem FCFS.
         pthread_mutex_lock(&queue_mutex);
         if (queue_head == request_count) {
             pthread_mutex_unlock(&queue_mutex);
@@ -81,16 +79,15 @@ void *worker(void *arg) {
         pthread_mutex_unlock(&queue_mutex);
 
         if (safe_mode) {
-            /* Espera a vez desta requisição (FCFS); só uma por vez na seção crítica. */
+            // Espera a vez desta requisição (FCFS); só uma por vez na seção crítica.
             wait_turn(&turn[request.id - 1]);
             old_a = account_a;
             old_b = account_b;
-            sleep(1); /* tempo de atendimento simulado, dentro da seção crítica */
+            sleep(1); // tempo de atendimento simulado, dentro da seção crítica
             account_a = old_a - 1;
             account_b = old_b + 1;
-            if (request.id < request_count) sem_post(&turn[request.id]); /* libera a próxima */
         } else {
-            /* Sem seção crítica completa: outra thread lê os mesmos saldos durante o sleep. */
+            // Sem seção crítica completa: outra thread lê os mesmos saldos durante o sleep.
             pthread_mutex_lock(&account_mutex);
             old_a = account_a;
             old_b = account_b;
@@ -109,6 +106,9 @@ void *worker(void *arg) {
         in_service[worker_id - 1] = 0;
         printf("Worker %d processou R%d\n", worker_id, request.id);
         pthread_mutex_unlock(&queue_mutex);
+
+        // A próxima transferência só começa depois de registrarmos a conclusão desta.
+        if (safe_mode && request.id < request_count) sem_post(&turn[request.id]);
     }
 }
 
@@ -136,10 +136,10 @@ int main(int argc, char **argv) {
     pthread_mutex_init(&queue_mutex, NULL);
     pthread_mutex_init(&account_mutex, NULL);
 
-    /* R1, R2, ... entram na fila nesta ordem, antes do início do atendimento. */
+    // R1, R2, ... entram na fila nesta ordem, antes do início do atendimento.
     for (i = 0; i < request_count; ++i) {
         queue[i].id = i + 1;
-        sem_init(&turn[i], 0, i == 0 ? 1 : 0); /* só R1 começa liberada */
+        sem_init(&turn[i], 0, i == 0 ? 1 : 0); // só R1 começa liberada
     }
 
     if (signal(SIGUSR1, handle_debug) == SIG_ERR) {
@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
 
     while (created > 0 && (input = getchar()) != EOF) {
         if (input == 'd' || input == 'D') {
-            /* Envia SIGUSR1 a esta thread (main); o handler apenas marca a flag. */
+            // Envia SIGUSR1 a esta thread (main); o handler apenas marca a flag.
             if (pthread_kill(pthread_self(), SIGUSR1) != 0) {
                 perror("pthread_kill");
                 break;

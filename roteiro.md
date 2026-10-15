@@ -1,103 +1,49 @@
 # Roteiro de apresentação — A01
 
-## 1. Abertura
+## 1. Contextualização e parâmetros
 
-### Mostrar
+- “Esta é uma simulação de PIX entre duas contas compartilhadas. Temos um único pool com quatro threads trabalhadoras, chamadas workers. N é a quantidade de solicitações, não a quantidade de workers. Neste programa, N solicitações disputam uma única base de contas; isso não simula o mapeamento de threads de usuário para threads de kernel. Todos os pedidos entram juntos em um lote inicial, na ordem R1, R2 e assim por diante.”<br>
+  Mostrar: [POOL_SIZE, linha 10](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:10>); [Request, linha 13](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:13>); [queue, linha 18](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:18>); [preenchimento da fila, linha 140](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:140>).
 
-- [`pix.c`, linhas 8–25](pix.c): tamanho do pool, estrutura `Request`, fila, saldos compartilhados e mutexes.
+- “Cada pedido transfere uma unidade de A para B. As contas começam com A igual a 1000 e B igual a zero. Escolhi quatro workers para mostrar facilmente pedidos acima da capacidade do pool. O limite de entrada é dez mil solicitações, e cada atendimento tem uma pausa simulada de um segundo para conseguirmos observar a execução. Essa pausa não é o tempo real de um PIX. Se todas as transferências forem preservadas, B deve terminar igual a N.”<br>
+  Mostrar: [MAX_REQUESTS, linha 11](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:11>); [saldos iniciais, linha 25](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:25>); [tempo simulado, linha 86](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:86>).
 
-### Falar
+## 2. Preparação do programa
 
-> “Esta é uma simulação simplificada de transferências entre duas contas. Os pedidos ficam numa fila e são atendidos por um pool com quatro threads trabalhadoras. Cada pedido transfere uma unidade da conta A para a conta B.”
+- “O programa é escrito em C. As bibliotecas fornecem entrada e saída, conversão dos argumentos, threads, sinais, pausas e semáforos. Na execução escolhemos race ou safe e informamos N. A conversão com strtol verifica se N é um inteiro válido. Depois inicializamos os mutexes, os pedidos e seus semáforos. Só o semáforo de R1 começa liberado.”<br>
+  Mostrar: [bibliotecas, linha 1](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:1>); [main, linha 115](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:115>); [validação de N, linha 128](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:128>); [inicialização dos mutexes, linha 136](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:136>); [inicialização dos semáforos, linha 142](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:142>).
 
-## 2. Parâmetros da simulação
+- “Criamos quatro workers e passamos o identificador de cada um como argumento. Como Pthreads recebe um ponteiro genérico, o worker converte esse argumento de volta para acessar seu número. Cada worker retira o primeiro pedido da fila, marca que está responsável por ele e repete o processo até não haver mais pedidos. O mutex da fila protege essa retirada e também o estado usado pela depuração.”<br>
+  Mostrar: [criação dos workers, linha 155](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:155>); [argumento do worker, linha 64](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:64>); [retirada FIFO, linha 77](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:77>); [pedido atribuído ao worker, linha 78](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:78>).
 
-| Parâmetro | Valor no código | Como explicar |
-|---|---:|---|
-| Número de pools | 1 | Há um único pool de workers. |
-| Workers do pool | 4 | `POOL_SIZE` define quatro threads que retiram e atendem os pedidos. |
-| `N` | Informado ao executar | É o número de pedidos de transferência, não o número de threads criadas. |
-| Pedidos máximos | 10.000 | Limite técnico definido por `MAX_REQUESTS`. |
-| Saldo inicial | A = 1000; B = 0 | Valores simples para comparar o resultado esperado. |
-| Valor transferido | 1 por pedido | Mantém a simulação fácil de acompanhar. |
-| Tempo simulado | 1 segundo | A pausa ajuda a observar a intercalação das threads; não representa o tempo real de um PIX. |
+## 3. Questão 1 — Condição de corrida
 
-### Falar
+- “O recurso compartilhado são os saldos de A e B. A seção crítica é a transferência inteira: ler os saldos, calcular e gravar os novos valores. No modo race, os acessos isolados têm mutex, mas ele é solto entre leitura e gravação. Durante a pausa outra thread pode ler os mesmos valores antigos. As duas calculam a partir do mesmo saldo e uma atualização sobrescreve a outra, causando uma transferência perdida.”<br>
+  Mostrar: [saldos compartilhados, linha 25](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:25>); [ramo race, linha 90](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:90>); [proteção isolada da leitura, linha 91](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:91>).
 
-> “Escolhi quatro workers para que seja fácil ver a diferença entre a capacidade de atendimento e os pedidos que ficam esperando. O valor de N pode mudar em cada execução. Como cada pedido transfere uma unidade, depois de N transferências corretas, B deve terminar com N.”
+- “Primeiro executo um pedido. B termina em um, como esperado. Depois executo dois: nos testes, B terminou em um, embora os dois pedidos tenham sido processados. Assim, a perda já ficou evidente em N igual a dois. Isso acontece com o tempo simulado usado aqui; o escalonamento pode variar entre execuções, então não afirmo uma fórmula fixa para todos os resultados.”<br>
+  Mostrar: no terminal, `gcc -std=c99 -Wall -Wextra -Wpedantic -pthread pix.c -o pix`; depois `./pix race 1` e `./pix race 2`. Digite `q` e Enter em cada execução para encerrar a entrada e aguardar o resultado. Compare o saldo B com o total esperado; no modo race, o código de saída 2 indica a divergência demonstrada.
 
-## 3. Preparação e início do programa
+## 4. Questão 2 — Proteção e FCFS
 
-### Mostrar
+- “No modo safe, cada pedido espera no seu próprio semáforo. R1 começa liberado; os demais ficam bloqueados. Depois de transferir, atualizar o contador e imprimir sua conclusão, R1 libera R2; R2 libera R3, e assim por diante. Isso protege a transferência inteira e garante FCFS tanto no atendimento quanto na saída. Não dependemos da ordem em que um mutex acordaria as threads.”<br>
+  Mostrar: [semáforos turn, linha 32](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:32>); [espera e repetição se interrompida por sinal, linha 56](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:56>); [transferência protegida, linha 81](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:81>); [contador e registro de conclusão, linha 105](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:105>); [liberação do próximo pedido, linha 111](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:111>).
 
-- [`pix.c`, linhas 97–113](pix.c): escolha do modo e leitura de N.
-- [`pix.c`, linhas 115–120](pix.c): inicialização dos mutexes e preenchimento da fila.
-- [`pix.c`, linhas 131–137](pix.c): criação dos quatro workers.
+- “O pool continua tendo quatro workers, mas as transferências na mesma base são serializadas. Até quatro pedidos ficam atribuídos aos workers, incluindo os que esperam sua vez; os restantes aguardam na fila. Com seis pedidos, maior que o pool, conseguimos observar R5 e R6 aguardando. A conclusão deve aparecer de R1 até R6, com A igual a 994 e B igual a seis. Como cada transferência protegida demora um segundo, essa execução leva aproximadamente seis segundos.”<br>
+  Mostrar: execute `./pix safe 6`; logo após iniciar, digite `d` e Enter para observar os pedidos nos workers e os que ainda aguardam. Depois digite `q` e Enter e confira a sequência R1 a R6 e os saldos finais. Os números dos workers podem variar.
 
-### Falar
+## 5. Questão 3 — Depuração por sinal
 
-> “Ao iniciar o programa, escolho o modo `race` ou `safe` e informo N. O programa inicializa os mutexes, coloca os pedidos na fila em ordem e cria os quatro workers. Cada worker atende pedidos até a fila acabar.”
+- “Quando digito d e Enter, a thread principal envia SIGUSR1 para si mesma com pthread_kill. O handler registra o pedido de depuração numa flag e reinstala o tratamento para permitir novos sinais. A impressão acontece depois, no fluxo normal do programa, evitando operações de impressão ou mutex dentro do handler.”<br>
+  Mostrar: [flag de depuração, linha 35](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:35>); [handler, linha 37](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:37>); [registro do handler, linha 145](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:145>); [envio do sinal, linha 167](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:167>); [consulta da flag e exibição, linha 171](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:171>).
 
-## 4. Item 1 — Condição de corrida
+- “A depuração mostra os pedidos atribuídos aos workers, a fila FCFS aguardando e o total concluído. Em safe, um pedido listado em atendimento pode estar bloqueado esperando seu semáforo. O mutex da fila mantém a leitura desses dados consistente enquanto os workers alteram o estado. Como o terminal lê uma linha, usamos d mais Enter.”<br>
+  Mostrar: [show_queue, linha 43](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:43>); [pedidos nos workers, linha 47](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:47>); [pedidos aguardando, linha 50](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:50>); [total concluído, linha 52](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:52>).
 
-### Mostrar
+- “Para demonstrar que o sinal funciona repetidamente, executo safe com seis pedidos e digito d e Enter duas vezes durante o atendimento. Entre as consultas a fila diminui e o total concluído aumenta. Por fim, q encerra somente a leitura do teclado; os workers continuam até terminar os pedidos.”<br>
+  Mostrar: `./pix safe 6`; digite `d` e Enter, aguarde cerca de dois segundos e repita. Depois digite `q` e Enter.
 
-- [`pix.c`, linhas 20–21](pix.c): saldos compartilhados `account_a` e `account_b`.
-- [`pix.c`, linhas 73–87](pix.c): modo `race`, com leitura e gravação separadas.
-- [`pix.c`, linhas 156–158](pix.c): resultado final dos saldos.
+## 6. Encerramento
 
-### Falar
-
-> “As contas são o recurso compartilhado. No modo `race`, cada thread lê os saldos, espera e depois grava os valores calculados. Como outra thread pode ler os mesmos saldos antes da gravação, uma atualização pode sobrescrever a outra. A seção crítica é a transferência inteira, da leitura até a gravação.”
-
-### Demonstração
-
-- Execute `./pix race 1` e observe um pedido.
-- Execute `./pix race 2` e compare o saldo de B com os dois pedidos esperados.
-- Explique que a pausa simulada aumenta a chance de os workers lerem os mesmos valores antigos.
-
-## 5. Item 2 — Proteção com mutex e fila FCFS
-
-### Mostrar
-
-- [`pix.c`, linha 8](pix.c): `POOL_SIZE` igual a 4.
-- [`pix.c`, linhas 54–61](pix.c): retirada do primeiro pedido da fila sob `queue_mutex`.
-- [`pix.c`, linhas 63–72](pix.c): modo `safe`, com `account_mutex` protegendo a transferência inteira.
-- [`pix.c`, linhas 89–93](pix.c): contador de transferências concluídas.
-
-### Falar
-
-> “A fila é atendida em ordem de chegada: cada worker retira o primeiro pedido disponível. Os quatro primeiros podem começar com os quatro workers; os seguintes esperam na fila. No modo `safe`, o mutex fica travado durante a leitura, o cálculo e a gravação dos saldos. Assim, outra thread espera a seção crítica ser liberada.”
-
-### Demonstração
-
-- Execute `./pix safe 6`.
-- Digite `d` e Enter enquanto há pedidos aguardando para mostrar a fila.
-- Compare o resultado final com seis transferências esperadas.
-
-## 6. Item 3 — Depuração por sinal
-
-### Mostrar
-
-- [`pix.c`, linhas 27–32](pix.c): flag e handler do sinal.
-- [`pix.c`, linhas 122–126](pix.c): associação de `SIGUSR1` ao handler.
-- [`pix.c`, linhas 139–149](pix.c): tecla `d`, envio do sinal e chamada para exibir a fila.
-- [`pix.c`, linhas 34–43](pix.c): função `show_queue`.
-
-### Falar
-
-> “Quando digito `d` e Enter, o programa envia `SIGUSR1`. O handler apenas marca que pedi a depuração. Em seguida, o fluxo normal do programa chama `show_queue`, que mostra os pedidos ainda aguardando.”
-
-## 7. Encerramento
-
-### Mostrar
-
-- [`pix.c`, linhas 154–158](pix.c): espera pelos workers e impressão do resultado final.
-
-### Falar
-
-> “No encerramento, `pthread_join` espera os quatro workers terminarem. Depois, o programa mostra os saldos finais e compara quantas transferências foram concluídas com quantas eram esperadas.”
-
-## 8. Limite importante da versão atual
-
-O código atual coloca todos os pedidos na fila antes de iniciar os workers. Portanto, cada execução representa **um único lote inicial**. Ele ainda não representa 10 pedidos chegando juntos e, mais tarde, outro lote de 30. Também não cria N threads: cria quatro workers e os pedidos são itens da fila. Se o professor exigir dois lotes separados ou N threads reais, o programa precisa ser adaptado antes de apresentar essa parte como implementada.
+- “pthread_join espera os workers terminarem antes de lermos o resultado final. O programa mostra os saldos e a quantidade de pedidos processados, compara B com N e libera os semáforos e mutexes. É importante comparar o saldo também: um pedido pode ter sido processado no modo race sem sua atualização ter sido preservada.”<br>
+  Mostrar: [espera pelos workers, linha 180](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:180>); [resultado final, linha 182](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:182>); [liberação dos recursos, linha 187](</home/eduardo/Área de trabalho/Sistemas Operacionais/prova01/pix.c:187>).
