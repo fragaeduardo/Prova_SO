@@ -55,7 +55,11 @@ void show_queue(void) {
 
 void wait_turn(sem_t *s) {
     // sem_wait pode falhar com EINTR se um sinal interromper a thread.
-    while (sem_wait(s) == -1 && errno == EINTR) {
+    while (sem_wait(s) == -1) {
+        if (errno != EINTR) {
+            perror("sem_wait");
+            exit(1);
+        }
     }
 }
 
@@ -139,7 +143,11 @@ int main(int argc, char **argv) {
     // R1, R2, ... entram na fila nesta ordem, antes do início do atendimento.
     for (i = 0; i < request_count; ++i) {
         queue[i].id = i + 1;
-        sem_init(&turn[i], 0, i == 0 ? 1 : 0); // só R1 começa liberada
+        // Só R1 começa liberada.
+        if (sem_init(&turn[i], 0, i == 0 ? 1 : 0) == -1) {
+            perror("sem_init");
+            return 1;
+        }
     }
 
     if (signal(SIGUSR1, handle_debug) == SIG_ERR) {
@@ -156,7 +164,7 @@ int main(int argc, char **argv) {
         worker_ids[i] = i + 1;
         if (pthread_create(&workers[i], NULL, worker, &worker_ids[i]) != 0) {
             fprintf(stderr, "Erro ao criar a thread %d.\n", i + 1);
-            break;
+            return 1;
         }
         ++created;
     }
